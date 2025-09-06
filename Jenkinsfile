@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_HUB_USER = 'santoshsingh7891'   // change if needed
+        DOCKER_HUB_USER = 'singhsantosh7891'   // change if needed
         DOCKER_IMAGE = 'zendrix-app'
     }
 
