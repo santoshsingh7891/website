@@ -1,64 +1,70 @@
 pipeline {
-    agent any
+  agent any
 
-    environment {
-        DOCKER_HUB_USER = 'singhsantosh7891'   // change if needed
-        DOCKER_IMAGE = 'zendrix-app'
+  triggers {
+    cron('H H 25 * *') // automatic run on 25th
+  }
+
+  environment {
+    DOCKER_HUB_CREDENTIALS = 'dockerhub-credentials'
+    DOCKER_IMAGE = "singhsantosh7891/website"
+  }
+
+  parameters {
+    booleanParam(defaultValue: false, description: 'Force deploy', name: 'FORCE_DEPLOY')
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
     }
 
-    stages {
-        stage('Clone Repo') {
-            steps {
-                git branch: 'master', url: 'https://github.com/santoshsingh7891/website.git'
-            }
+    stage('Build Docker Image') {
+      steps {
+        script {
+          IMAGE_TAG = "${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
+          sh "docker build -t ${IMAGE_TAG} -t ${DOCKER_IMAGE}:latest ."
         }
-
-        stage('Build Docker Image') {
-            steps {
-                sh 'docker build -t $DOCKER_IMAGE:latest .'
-            }
-        }
-
-        stage('Run & Test Locally') {
-            steps {
-                sh '''
-                docker rm -f zendrix-app || true
-                docker run -d -p 85:80 --name zendrix-app $DOCKER_IMAGE:latest
-                sleep 5
-                if curl -s http://localhost:85 | grep -q "html"; then
-                  echo "✅ Test Passed: App is running"
-                else
-                  echo "❌ Test Failed: App is not responding"
-                  exit 1
-                fi
-                '''
-            }
-        }
-
-        stage('Push to DockerHub') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
-                                                 usernameVariable: 'USER',
-                                                 passwordVariable: 'PASS')]) {
-                    sh '''
-                    echo "$PASS" | docker login -u "$USER" --password-stdin
-                    docker tag $DOCKER_IMAGE:latest $DOCKER_HUB_USER/$DOCKER_IMAGE:latest
-                    docker push $DOCKER_HUB_USER/$DOCKER_IMAGE:latest
-                    '''
-                }
-            }
-        }
-
-        stage('Deploy to Kubernetes') {
-            steps {
-                sh '''
-                kubectl delete deployment zendrix-app || true
-                kubectl delete service zendrix-service || true
-
-                kubectl create deployment zendrix-app --image=$DOCKER_HUB_USER/$DOCKER_IMAGE:latest
-                kubectl expose deployment zendrix-app --type=NodePort --port=80 --name=zendrix-service
-                '''
-            }
-        }
+      }
     }
+
+    stage('Push Docker Image') {
+      steps {
+        script {
+          docker.withRegistry('https://index.docker.io/v1/', "${DOCKER_HUB_CREDENTIALS}") {
+            docker.image("${DOCKER_IMAGE}:latest").push()
+            docker.image("${DOCKER_IMAGE}:${env.BUILD_NUMBER}").push()
+          }
+        }
+      }
+    }
+
+    stage('Deploy to Kubernetes') {
+      when {
+        expression {
+          def day = new Date().format('dd', TimeZone.getTimeZone('Asia/Kolkata'))
+          return (day == '25') || params.FORCE_DEPLOY
+        }
+      }
+      steps {
+        withKubeConfig([credentialsId: 'kubeconfig']) {
+          sh "kubectl apply -f k8s/namespace.yaml"
+          sh "kubectl apply -f k8s/deployment.yaml"
+          sh "kubectl apply -f k8s/service.yaml"
+          sh "kubectl rollout status deployment/website-deployment -n production --timeout=120s"
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "✅ Deployment successful"
+    }
+    failure {
+      echo "❌ Deployment failed"
+    }
+  }
 }
