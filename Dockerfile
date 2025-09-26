@@ -1,5 +1,4 @@
-FROM nginx:alpine
-WORKDIR /usr/share/nginx/html
-COPY index.html index.html
-COPY images/ images/
+FROM nginx:stable-alpine
+RUN rm -rf /usr/share/nginx/html/*
+COPY . /usr/share/nginx/html
 EXPOSE 80
