@@ -2,11 +2,14 @@ apiVersion: v1
 kind: Service
 metadata:
   name: website-service
+  namespace: production
+  labels:
+    app: website
 spec:
-  type: NodePort
+  type: LoadBalancer   # will create ELB on AWS
   selector:
     app: website
   ports:
     - port: 80
       targetPort: 80
-      nodePort: 30008
+      protocol: TCP

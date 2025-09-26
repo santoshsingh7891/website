@@ -11,12 +11,14 @@ pipeline {
   }
 
   parameters {
-    booleanParam(defaultValue: false, description: 'Force deploy', name: 'FORCE_DEPLOY')
+    booleanParam(defaultValue: false, description: 'Force deploy to Kubernetes', name: 'FORCE_DEPLOY')
   }
 
   stages {
+
     stage('Checkout') {
       steps {
+        echo "📥 Checking out code from GitHub..."
         checkout scm
       }
     }
@@ -24,7 +26,8 @@ pipeline {
     stage('Build Docker Image') {
       steps {
         script {
-          IMAGE_TAG = "${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
+          def IMAGE_TAG = "${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
+          echo "🐳 Building Docker image: ${IMAGE_TAG}"
           sh "docker build -t ${IMAGE_TAG} -t ${DOCKER_IMAGE}:latest ."
         }
       }
@@ -33,9 +36,10 @@ pipeline {
     stage('Push Docker Image') {
       steps {
         script {
-          docker.withRegistry('https://index.docker.io/v1/', "${DOCKER_HUB_CREDENTIALS}") {
-            docker.image("${DOCKER_IMAGE}:latest").push()
-            docker.image("${DOCKER_IMAGE}:${env.BUILD_NUMBER}").push()
+          echo "📤 Pushing Docker images to Docker Hub..."
+          docker.withRegistry('https://index.docker.io/v1/', DOCKER_HUB_CREDENTIALS) {
+            sh "docker push ${DOCKER_IMAGE}:latest"
+            sh "docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
           }
         }
       }
@@ -49,6 +53,7 @@ pipeline {
         }
       }
       steps {
+        echo "🚀 Deploying to Kubernetes..."
         withKubeConfig([credentialsId: 'kubeconfig']) {
           sh "kubectl apply -f k8s/namespace.yaml"
           sh "kubectl apply -f k8s/deployment.yaml"
@@ -61,10 +66,10 @@ pipeline {
 
   post {
     success {
-      echo "✅ Deployment successful"
+      echo "✅ Deployment successful!"
     }
     failure {
-      echo "❌ Deployment failed"
+      echo "❌ Deployment failed!"
     }
   }
 }

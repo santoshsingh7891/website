@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: website-deployment
+  namespace: production
   labels:
     app: website
 spec:
@@ -15,7 +16,14 @@ spec:
         app: website
     spec:
       containers:
-      - name: website
-        image: singhsantosh7891/website:latest
-        ports:
-        - containerPort: 80
+        - name: website
+          image: singhsantosh7891/website:latest   # Jenkins will push latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
